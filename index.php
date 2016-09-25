@@ -28,8 +28,10 @@ $app->post(
 		$user = json_decode($request->getBody(),true);
 		postAddUser($user['name'],$user['cpf'],$user['dateOfBirth'],$user['login'],
                     $user['phone'],$user['password']);
-        echo $user['name']."\n";
-	});
+        //echo $user['name']."\n";
+        //echo "\n".$user."\n";
+	}
+);
 
 // GET route to get user by his email
 $app->get(
@@ -40,9 +42,30 @@ $app->get(
 	}
 );
 
+// POST route to update a user
+$app->post(
+	'/user/update',
+	function ($request, $response, $args) {
+		$user = json_decode($request->getBody(),true);
+		postUpdateUser($user['name'],$user['cpf'],$user['dateOfBirth'],$user['login'],
+                    $user['phone'],$user['password']);
+        //echo $user['name']."\n";
+	}
+);
+
+// GET route to get user by his email
+$app->post(
+	'/user/deactivate/{email}',
+	function ($request, $response, $args) {
+		//echo "This is a GET route to request a user by his email. <br>";
+		deactivateUserByEmail($args['email']);
+        echo "User deactivated";
+	}    
+);
+
 // GET route to get all users
 $app->get(
-	'/user/',
+	'/user',
 	function ($request, $response, $args) {
 		//echo "This is a GET route to request a user by his email. <br>";
 		getAllUsers();
@@ -162,7 +185,7 @@ function getUserByEmail($email){
         $row_array['dateOfBirth'] = $row['dt_nasc'];
         $row_array['login'] = $row['txt_email'];
         $row_array['phone'] = $row['nr_telefone'];
-        $row_array['password'] = $row['txt_senha'];  
+        $row_array['password'] = $row['txt_senha'];
 
 		array_push($return_arr,$row_array);	// put the created array in the return arrow
 	}
@@ -174,6 +197,84 @@ function getUserByEmail($email){
 
 }
 
+// Function to update a user's information, calling a procedure from DB, by passing user info to be updated
+function postUpdateUser($name,$cpf,$dateOfBirth,$login,$phone,$pass){
+	//$db = new mysqli("localhost:3306","root","","splitterdb");
+	$db = getDB();
+    
+	// veryfing if the connection is successful
+	if ($db->connect_errno) {
+    echo "Failed to connect to MySQL: (" . $db->connect_errno . ") " . $db->connect_error;
+	}
+
+	/* Prepared statement, stage 1: prepare */
+	if (!($stmt = $db->prepare("CALL pr_atualizar_conta (?,?,STR_TO_DATE(?,'%d/%m/%Y'),?,?,?)"))) {
+    echo "Prepare failed: (" . $db->errno . ") " . $db->error;
+	}
+
+	/* Prepared statement, stage 2: bind and execute */
+	//$id = 1;
+	if (!$stmt->bind_param("sissis", $name, $cpf, $dateOfBirth, $login, $phone, $pass)) {
+	    echo "Binding parameters failed: (" . $stmt->errno . ") " . $stmt->error;
+	}
+
+	if (!$stmt->execute()) {
+	    echo "Execute failed: (" . $stmt->errno . ") " . $stmt->error;
+	}
+	else{
+		echo "User ".$name." Successfully Updated";
+	}
+
+	$db->close();		// close connection to the database
+}
+
+// Function to get a specific user from database by his email
+function deactivateUserByEmail($email){
+	$db = getDB();
+	//$db = new mysqli("localhost","root","","splitterdb");
+	
+	// veryfing if the connection is successful
+	if ($db->connect_errno) {
+    echo "Failed to connect to MySQL: (" . $db->connect_errno . ") " . $db->connect_error;
+	}
+
+	/* Prepared statement, stage 1: prepare */
+	if (!($stmt = $db->prepare("UPDATE tb_cliente SET conta_ativa=0 
+    WHERE id = (SELECT id FROM tb_login WHERE txt_login =?);"))) {
+    echo "Prepare failed: (" . $db->errno . ") " . $db->error;
+	}
+
+	/* Prepared statement, stage 2: bind and execute */
+	if (!$stmt->bind_param("s", $email)) {
+	    echo "Binding parameters failed: (" . $stmt->errno . ") " . $stmt->error;
+	}
+
+	if (!$stmt->execute()) {
+	    echo "Execute failed: (" . $stmt->errno . ") " . $stmt->error;
+	}
+
+	$res = $stmt->get_result();		// getting the result from the query
+    
+	$return_arr = array();	// creating an empty array
+
+	// enconde database into json format
+	while($row = $res->fetch_assoc()){
+		$row_array['id'] = $row['id'];		// assigning the information to another arrow
+		$row_array['name'] = $row['txt_nome'];
+        $row_array['cpf'] = $row['nr_cpf'];
+        $row_array['dateOfBirth'] = $row['dt_nasc'];
+        $row_array['phone'] = $row['nr_telefone'];
+        $row_array['conta_ativa'] = $row['conta_ativa'];
+
+		array_push($return_arr,$row_array);	// put the created array in the return arrow
+	}
+
+	echo json_encode($return_arr);	// encoding the entire array to json
+			// it's printing the json to the php
+
+	$db->close();		// close connection to the database
+
+}
 
 // Function to get a specific user from database by his email
 function getAllUsers(){
@@ -206,6 +307,7 @@ function getAllUsers(){
         $row_array['dateOfBirth'] = $row['dt_nascimento'];
         $row_array['login'] = $row['txt_email'];
         $row_array['phone'] = $row['nr_telefone'];
+        $row_array['conta_ativa'] = $row['conta_ativa'];
 
 		array_push($return_arr,$row_array);	// put the created array in the return arrow
 	}
